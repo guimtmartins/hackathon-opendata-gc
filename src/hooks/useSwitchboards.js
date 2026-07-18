@@ -1,20 +1,16 @@
 import { useEffect, useState } from 'react';
-import { fetchZoning } from '../lib/arcgis';
+import { fetchSwitchboards } from '../lib/arcgis';
 
-export function useZoning(enabled = true) {
+export function useSwitchboards() {
   const [data, setData] = useState(null);
   const [debug, setDebug] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
     setLoading(true);
-    fetchZoning()
+    fetchSwitchboards()
       .then((result) => {
         if (!cancelled) {
           setData(result.geojson);
@@ -30,7 +26,7 @@ export function useZoning(enabled = true) {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, []);
 
   return { data, debug, error, loading };
 }

@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export function useSuburbZoning() {
+export function useSuburbZoning(enabled = true) {
   const [bySuburb, setBySuburb] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     supabase
       .from('suburb_zoning')
@@ -32,7 +36,7 @@ export function useSuburbZoning() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   return { bySuburb, error, loading };
 }

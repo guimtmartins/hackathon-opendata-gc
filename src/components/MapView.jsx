@@ -1,6 +1,8 @@
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { useEffect, useMemo } from 'react';
-import { ZONE_COLORS, ZONE_LABELS, RISK_COLOR } from '../data/densityColors';
+import { ZONE_COLORS, ZONE_LABELS, RISK_COLOR, HIGH_RISK } from '../data/densityColors';
+import { nearestSuburb } from '../lib/arcgis';
 
 function AutoInvalidateSize() {
   const map = useMap();
@@ -13,11 +15,35 @@ function AutoInvalidateSize() {
   return null;
 }
 
-export default function MapView({ zoning, historical, flood, suburbs, layersOn }) {
+export default function MapView({ zoning, historical, flood, suburbs, switchboards, switchboardHighRiskOnly, layersOn }) {
   const maxCount = useMemo(
     () => Math.max(1, ...historical.map((p) => p.count || 0)),
     [historical]
   );
+
+  // The Switchboard dataset has no suburb attribute, so each point is bucketed
+  // to its nearest suburb centroid to borrow that suburb's flood risk score.
+  const switchboardData = useMemo(() => {
+    if (!switchboards?.data || !suburbs.length) return null;
+    const withRisk = switchboards.data.features.map((f) => {
+      const [lon, lat] = f.geometry.coordinates;
+      const suburb = nearestSuburb(lon, lat, suburbs);
+      const risk = flood.bySuburb[suburb];
+      return {
+        ...f,
+        properties: {
+          ...f.properties,
+          suburb,
+          riskScore: risk?.score ?? null,
+          riskDominant: risk?.dominant ?? null,
+        },
+      };
+    });
+    const features = switchboardHighRiskOnly
+      ? withRisk.filter((f) => HIGH_RISK.includes(f.properties.riskDominant))
+      : withRisk;
+    return { ...switchboards.data, features };
+  }, [switchboards?.data, suburbs, flood.bySuburb, switchboardHighRiskOnly]);
 
   return (
     <MapContainer center={[-28.0, 153.42]} zoom={11} zoomControl={false} style={{ height: '100%', width: '100%' }}>
@@ -86,6 +112,34 @@ export default function MapView({ zoning, historical, flood, suburbs, layersOn }
               </CircleMarker>
             );
           })}
+
+      {layersOn.switchboards && switchboardData && (
+        <GeoJSON
+          key={`switchboards-${switchboardHighRiskOnly}`}
+          data={switchboardData}
+          pointToLayer={(feature, latlng) => {
+            const color = RISK_COLOR[feature.properties.riskDominant] || '#8B8F97';
+            return L.circleMarker(latlng, {
+              radius: 3,
+              fillColor: color,
+              fillOpacity: 0.7,
+              color,
+              weight: 0.5,
+              opacity: 0.9,
+            });
+          }}
+          onEachFeature={(feature, layer) => {
+            const { suburb, riskScore, riskDominant, class: switchClass } = feature.properties;
+            layer.bindPopup(
+              `<div class="popup-suburb">${suburb || 'Unknown suburb'}</div>` +
+                `<div class="popup-count">${switchClass || 'Switchboard'}</div>` +
+                (riskScore !== null
+                  ? `<div class="popup-note">Nearest suburb flood risk: ${riskScore}/100 (${riskDominant})</div>`
+                  : '')
+            );
+          }}
+        />
+      )}
     </MapContainer>
   );
 }

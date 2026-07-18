@@ -12,6 +12,10 @@ const FLOOD_URL =
   'https://services-ap1.arcgis.com/lnVW0dLI3fvST2hd/arcgis/rest/services/Flood_Risk_Overlay_2024/FeatureServer';
 const FLOOD_LAYER_ID = 35;
 
+const SWITCHBOARD_URL =
+  'https://services.arcgis.com/3vStCH7NDoBOZ5zn/arcgis/rest/services/Switchboard/FeatureServer';
+const SWITCHBOARD_LAYER_ID = 0;
+
 async function fetchAllFeatures(baseUrl, layerId, { outFields = '*', where = '1=1', geometry = true } = {}) {
   const all = [];
   let offset = 0;
@@ -33,8 +37,8 @@ async function fetchAllFeatures(baseUrl, layerId, { outFields = '*', where = '1=
     const features = json.features || [];
     if (!debug) debug = { url, params: paramsObj, sample: features[0] || null };
     all.push(...features);
-    if (features.length < 2000) break;
-    offset += 2000;
+    offset += features.length;
+    if (!json.properties?.exceededTransferLimit || features.length === 0) break;
   }
   return { features: all, debug };
 }
@@ -120,4 +124,40 @@ export async function fetchFloodRiskBySuburb() {
   };
 
   return { bySuburb: result, citywide, debug };
+}
+
+export async function fetchSwitchboards() {
+  const { features, debug } = await fetchAllFeatures(SWITCHBOARD_URL, SWITCHBOARD_LAYER_ID, {
+    outFields: 'CLASS,GIS_USER_STATUS,GIS_OWNER',
+  });
+  return {
+    geojson: {
+      type: 'FeatureCollection',
+      features: features.map((f) => ({
+        ...f,
+        properties: {
+          class: f.properties.CLASS,
+          status: f.properties.GIS_USER_STATUS,
+          owner: f.properties.GIS_OWNER,
+        },
+      })),
+    },
+    debug,
+  };
+}
+
+// The Switchboard layer has no SUBURBS attribute, unlike the flood risk layer —
+// bucket each point to its nearest suburb centroid instead (same "approximate
+// centroid" tradeoff already used for suburb markers elsewhere in the app).
+export function nearestSuburb(lon, lat, suburbs) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const s of suburbs) {
+    const d = (s.lon - lon) ** 2 + (s.lat - lat) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = s.name;
+    }
+  }
+  return best;
 }

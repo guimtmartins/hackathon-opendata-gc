@@ -7,17 +7,21 @@ import { useHistorical } from './hooks/useHistorical';
 import { useFloodRisk } from './hooks/useFloodRisk';
 import { useSuburbs } from './hooks/useSuburbs';
 import { useSuburbZoning } from './hooks/useSuburbZoning';
+import { useSwitchboards } from './hooks/useSwitchboards';
+import { SHOW_ZONING } from './data/densityColors';
 import './App.css';
 
 export default function App() {
-  const zoning = useZoning();
+  const zoning = useZoning(SHOW_ZONING);
   const historical = useHistorical();
   const flood = useFloodRisk();
   const suburbs = useSuburbs();
-  const suburbZoning = useSuburbZoning();
+  const suburbZoning = useSuburbZoning(SHOW_ZONING);
+  const switchboards = useSwitchboards();
 
-  const [layersOn, setLayersOn] = useState({ zoning: true, historical: false, flood: false });
+  const [layersOn, setLayersOn] = useState({ zoning: false, historical: false, flood: false, switchboards: false });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [switchboardHighRiskOnly, setSwitchboardHighRiskOnly] = useState(false);
 
   function toggleLayer(key) {
     setLayersOn((s) => ({ ...s, [key]: !s[key] }));
@@ -31,6 +35,8 @@ export default function App() {
           historical={historical.rows}
           flood={flood}
           suburbs={suburbs.suburbs}
+          switchboards={switchboards}
+          switchboardHighRiskOnly={switchboardHighRiskOnly}
           layersOn={layersOn}
         />
       </div>
@@ -52,6 +58,9 @@ export default function App() {
           flood={flood}
           suburbs={suburbs.suburbs}
           suburbZoning={suburbZoning}
+          switchboards={switchboards}
+          switchboardHighRiskOnly={switchboardHighRiskOnly}
+          setSwitchboardHighRiskOnly={setSwitchboardHighRiskOnly}
           layersOn={layersOn}
           toggleLayer={toggleLayer}
           meta={{ devApps: historical.meta }}
@@ -60,9 +69,10 @@ export default function App() {
       )}
 
       <footer>
-        Zoning: City of Gold Coast Open Data Portal, City Plan v9 - fetched live. Development
-        approvals: Supabase (historical records 2012-2016). Flood risk: Flood Risk
-        Overlay, 2024 modeling - fetched live. Suburb locations are approximate (centroid).
+        {SHOW_ZONING && 'Zoning: City of Gold Coast Open Data Portal, City Plan v9 - fetched live. '}
+        Development approvals: Supabase (historical records 2012-2016). Flood risk: Flood Risk
+        Overlay, 2024 modeling - fetched live. Electrical switchboards: City of Gold Coast Open
+        Data Portal - fetched live. Suburb locations are approximate (centroid).
       </footer>
     </div>
   );

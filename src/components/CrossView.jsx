@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ZONE_COLORS, RISK_COLOR } from '../data/densityColors';
+import { ZONE_COLORS, RISK_COLOR, HIGH_RISK, SHOW_ZONING } from '../data/densityColors';
 import { normalizeSuburb } from '../lib/arcgis';
 
 const TIERS = [
@@ -27,7 +27,7 @@ function ZoningBar({ mix }) {
   );
 }
 
-export default function CrossView({ suburbs, historical, flood, suburbZoning }) {
+export default function CrossView({ suburbs, historical, flood, suburbZoning, switchboardsBySuburb }) {
   const [sortKey, setSortKey] = useState('count');
 
   const allRows = useMemo(() => {
@@ -43,11 +43,15 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
         riskDominant: risk?.dominant || null,
         mix,
         zonedTotal,
+        switchboards: switchboardsBySuburb?.[s.name] || 0,
       };
     });
-  }, [suburbs, historical, flood, suburbZoning]);
+  }, [suburbs, historical, flood, suburbZoning, switchboardsBySuburb]);
 
-  const rows = useMemo(() => allRows.filter((r) => r.zonedTotal > 0), [allRows]);
+  const rows = useMemo(
+    () => allRows.filter((r) => (SHOW_ZONING ? r.zonedTotal > 0 : r.count > 0 || r.riskScore >= 0)),
+    [allRows]
+  );
   const excludedCount = allRows.length - rows.length;
 
   const sorted = useMemo(() => {
@@ -67,9 +71,15 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
       .filter((r) => r.count >= medianCount && r.name !== topActivity?.name)
       .sort((a, b) => b.riskScore - a.riskScore)[0];
 
-    const underused = [...rows]
-      .filter((r) => r.zonedTotal >= 20 && r.name !== topActivity?.name && r.name !== riskAlert?.name)
-      .sort((a, b) => a.count / a.zonedTotal - b.count / b.zonedTotal)[0];
+    const underused = SHOW_ZONING
+      ? [...rows]
+          .filter((r) => r.zonedTotal >= 20 && r.name !== topActivity?.name && r.name !== riskAlert?.name)
+          .sort((a, b) => a.count / a.zonedTotal - b.count / b.zonedTotal)[0]
+      : null;
+
+    const infraExposure = [...rows]
+      .filter((r) => HIGH_RISK.includes(r.riskDominant) && r.switchboards > 0)
+      .sort((a, b) => b.switchboards - a.switchboards)[0];
 
     const items = [];
     if (topActivity) {
@@ -92,6 +102,13 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
         color: 'var(--good)',
         title: `${underused.name}: underused zoned capacity`,
         body: `${underused.zonedTotal.toLocaleString('en-AU')} lots zoned for residential use, but only ${underused.count.toLocaleString('en-AU')} approvals in the period (~${pct}% apparent uptake).`,
+      });
+    }
+    if (infraExposure) {
+      items.push({
+        color: RISK_COLOR[infraExposure.riskDominant] || 'var(--critical)',
+        title: `${infraExposure.name}: electrical infrastructure exposure`,
+        body: `${infraExposure.switchboards.toLocaleString('en-AU')} switchboards mapped in a suburb with ${infraExposure.riskDominant} flood risk (${infraExposure.riskScore}/100) — a proxy for how much network infrastructure sits in the exposed zone.`,
       });
     }
     return items;
@@ -119,7 +136,9 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
   return (
     <div>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10, lineHeight: 1.4 }}>
-        Zoning (allowed capacity) × approvals (actual activity) × flood risk, by suburb.
+        {SHOW_ZONING
+          ? 'Zoning (allowed capacity) × approvals (actual activity) × flood risk × electrical infrastructure, by suburb.'
+          : 'Approvals (actual activity) × flood risk × electrical infrastructure (switchboards), by suburb.'}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
@@ -159,9 +178,14 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
         <div style={{ width: 46, textAlign: 'right' }}>
           <SortButton k="riskScore" label="Risk" />
         </div>
-        <div style={{ width: 62, textAlign: 'right' }}>
-          <SortButton k="zonedTotal" label="Zoned" />
+        <div style={{ width: 50, textAlign: 'right' }}>
+          <SortButton k="switchboards" label="SB" />
         </div>
+        {SHOW_ZONING && (
+          <div style={{ width: 62, textAlign: 'right' }}>
+            <SortButton k="zonedTotal" label="Zoned" />
+          </div>
+        )}
       </div>
       <div style={{ maxHeight: 260, overflowY: 'auto', paddingRight: 10 }}>
         {sorted.map((r) => (
@@ -178,9 +202,11 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
           >
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-              <div style={{ marginTop: 3 }}>
-                <ZoningBar mix={r.mix} />
-              </div>
+              {SHOW_ZONING && (
+                <div style={{ marginTop: 3 }}>
+                  <ZoningBar mix={r.mix} />
+                </div>
+              )}
             </div>
             <div style={{ width: 60, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.count}</div>
             <div style={{ width: 46, textAlign: 'right' }}>
@@ -198,16 +224,22 @@ export default function CrossView({ suburbs, historical, flood, suburbZoning }) 
                 <span style={{ color: 'var(--text-faint)' }}>—</span>
               )}
             </div>
-            <div style={{ width: 62, textAlign: 'right', color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
-              {r.zonedTotal || '—'}
+            <div style={{ width: 50, textAlign: 'right', color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
+              {r.switchboards || '—'}
             </div>
+            {SHOW_ZONING && (
+              <div style={{ width: 62, textAlign: 'right', color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
+                {r.zonedTotal || '—'}
+              </div>
+            )}
           </div>
         ))}
       </div>
       {excludedCount > 0 && (
         <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 8 }}>
-          {excludedCount} suburbs that are mostly rural/conservation area, with no mapped residential zoning, are not
-          shown.
+          {SHOW_ZONING
+            ? `${excludedCount} suburbs that are mostly rural/conservation area, with no mapped residential zoning, are not shown.`
+            : `${excludedCount} suburbs with no recorded approvals or flood risk data are not shown.`}
         </div>
       )}
     </div>
