@@ -1,7 +1,19 @@
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useEffect, useMemo } from 'react';
-import { ZONE_COLORS, ZONE_LABELS, RISK_COLOR, HIGH_RISK } from '../data/densityColors';
+import {
+  ZONE_COLORS,
+  ZONE_LABELS,
+  RISK_COLOR,
+  HIGH_RISK,
+  SWITCHBOARD_MARKER_PX,
+  SWITCHBOARD_RANGE_M,
+  OFFLINE_COLOR,
+  FOCUS_SUBURBS,
+  FOCUS_CENTER,
+  FOCUS_ZOOM,
+  inFocus,
+} from '../data/densityColors';
 import { nearestSuburb } from '../lib/arcgis';
 
 function AutoInvalidateSize() {
@@ -15,7 +27,7 @@ function AutoInvalidateSize() {
   return null;
 }
 
-export default function MapView({ zoning, historical, flood, suburbs, switchboards, switchboardHighRiskOnly, layersOn }) {
+export default function MapView({ zoning, historical, flood, suburbs, switchboards, outageSimOn, layersOn }) {
   const maxCount = useMemo(
     () => Math.max(1, ...historical.map((p) => p.count || 0)),
     [historical]
@@ -29,6 +41,7 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
       const [lon, lat] = f.geometry.coordinates;
       const suburb = nearestSuburb(lon, lat, suburbs);
       const risk = flood.bySuburb[suburb];
+      const critical = f.properties.class === 'THREE-PHASE' && f.properties.owner === 'GCCC';
       return {
         ...f,
         properties: {
@@ -36,17 +49,26 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
           suburb,
           riskScore: risk?.score ?? null,
           riskDominant: risk?.dominant ?? null,
+          // Offline in the simulated scenario: every critical (GCCC, three-phase)
+          // switchboard in a High/Very High flood-risk suburb fails at once.
+          offline: outageSimOn && critical && HIGH_RISK.includes(risk?.dominant),
         },
       };
     });
-    const features = switchboardHighRiskOnly
-      ? withRisk.filter((f) => HIGH_RISK.includes(f.properties.riskDominant))
-      : withRisk;
+    const features = withRisk.filter((f) => inFocus(f.properties.suburb));
     return { ...switchboards.data, features };
-  }, [switchboards?.data, suburbs, flood.bySuburb, switchboardHighRiskOnly]);
+  }, [switchboards?.data, suburbs, flood.bySuburb, outageSimOn]);
 
   return (
-    <MapContainer center={[-28.0, 153.42]} zoom={11} zoomControl={false} style={{ height: '100%', width: '100%' }}>
+    // preferCanvas: 4k+ circle markers as individual SVG nodes make the page crawl;
+    // canvas rendering keeps the same look at a fraction of the cost.
+    <MapContainer
+      center={FOCUS_SUBURBS.length ? FOCUS_CENTER : [-28.0, 153.42]}
+      zoom={FOCUS_SUBURBS.length ? FOCUS_ZOOM : 11}
+      zoomControl={false}
+      preferCanvas
+      style={{ height: '100%', width: '100%' }}
+    >
       <AutoInvalidateSize />
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -93,7 +115,7 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
 
       {layersOn.flood &&
         suburbs
-          .filter((s) => flood.bySuburb[s.name])
+          .filter((s) => flood.bySuburb[s.name] && inFocus(s.name))
           .map((s) => {
             const risk = flood.bySuburb[s.name];
             const color = RISK_COLOR[risk.dominant] || '#8B8F97';
@@ -115,24 +137,53 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
 
       {layersOn.switchboards && switchboardData && (
         <GeoJSON
-          key={`switchboards-${switchboardHighRiskOnly}`}
+          key={`switchboards-${outageSimOn}`}
           data={switchboardData}
           pointToLayer={(feature, latlng) => {
-            const color = RISK_COLOR[feature.properties.riskDominant] || '#8B8F97';
+            const { riskDominant, size, offline } = feature.properties;
+            const sizeKey = (size || 'TBA').toUpperCase();
+            const radius = SWITCHBOARD_MARKER_PX[sizeKey] || SWITCHBOARD_MARKER_PX.TBA;
+            if (offline) {
+              // Indicative coverage circle (metres, scales with zoom) + the marker itself.
+              const range = L.circle(latlng, {
+                radius: SWITCHBOARD_RANGE_M[sizeKey] || SWITCHBOARD_RANGE_M.TBA,
+                fillColor: OFFLINE_COLOR,
+                fillOpacity: 0.12,
+                color: OFFLINE_COLOR,
+                weight: 1,
+                opacity: 0.7,
+                dashArray: '4 3',
+              });
+              const marker = L.circleMarker(latlng, {
+                radius,
+                fillColor: OFFLINE_COLOR,
+                fillOpacity: 0.9,
+                color: '#fff',
+                weight: 0.8,
+                opacity: 0.9,
+              });
+              return L.featureGroup([range, marker]);
+            }
+            const color = RISK_COLOR[riskDominant] || '#8B8F97';
             return L.circleMarker(latlng, {
-              radius: 3,
+              radius,
               fillColor: color,
-              fillOpacity: 0.7,
+              fillOpacity: outageSimOn ? 0.35 : 0.7,
               color,
               weight: 0.5,
-              opacity: 0.9,
+              opacity: outageSimOn ? 0.5 : 0.9,
             });
           }}
           onEachFeature={(feature, layer) => {
-            const { suburb, riskScore, riskDominant, class: switchClass } = feature.properties;
+            const { suburb, riskScore, riskDominant, class: switchClass, size, offline } = feature.properties;
+            const sizeKey = (size || 'TBA').toUpperCase();
+            const rangeM = SWITCHBOARD_RANGE_M[sizeKey] || SWITCHBOARD_RANGE_M.TBA;
             layer.bindPopup(
               `<div class="popup-suburb">${suburb || 'Unknown suburb'}</div>` +
-                `<div class="popup-count">${switchClass || 'Switchboard'}</div>` +
+                `<div class="popup-count">${switchClass || 'Switchboard'}${size ? ` · ${size}` : ''}</div>` +
+                (offline
+                  ? `<div class="popup-note" style="color:${OFFLINE_COLOR}">OFFLINE (simulated flood damage) — its own ${rangeM} m indicative service area, not a spread zone</div>`
+                  : '') +
                 (riskScore !== null
                   ? `<div class="popup-note">Nearest suburb flood risk: ${riskScore}/100 (${riskDominant})</div>`
                   : '')

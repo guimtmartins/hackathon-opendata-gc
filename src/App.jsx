@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
+import GridStatus from './components/GridStatus';
 import { useZoning } from './hooks/useZoning';
 import { useHistorical } from './hooks/useHistorical';
 import { useFloodRisk } from './hooks/useFloodRisk';
 import { useSuburbs } from './hooks/useSuburbs';
 import { useSuburbZoning } from './hooks/useSuburbZoning';
 import { useSwitchboards } from './hooks/useSwitchboards';
-import { SHOW_ZONING } from './data/densityColors';
+import { useRainForecast } from './hooks/useRainForecast';
+import { useCommunityBuildings } from './hooks/useCommunityBuildings';
+import { SHOW_ZONING, inFocus } from './data/densityColors';
+import { normalizeSuburb, nearestSuburb } from './lib/arcgis';
 import './App.css';
 
 export default function App() {
@@ -18,14 +22,54 @@ export default function App() {
   const suburbs = useSuburbs();
   const suburbZoning = useSuburbZoning(SHOW_ZONING);
   const switchboards = useSwitchboards();
+  const rain = useRainForecast(suburbs.suburbs);
+  const communityBuildings = useCommunityBuildings();
 
-  const [layersOn, setLayersOn] = useState({ zoning: false, historical: false, flood: false, switchboards: false });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [switchboardHighRiskOnly, setSwitchboardHighRiskOnly] = useState(false);
+  const [layersOn, setLayersOn] = useState({ zoning: false, historical: false, flood: true, switchboards: true });
+  const [outageSimOn, setOutageSimOn] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   function toggleLayer(key) {
     setLayersOn((s) => ({ ...s, [key]: !s[key] }));
   }
+
+  function toggleOutageSim() {
+    const next = !outageSimOn;
+    setOutageSimOn(next);
+    // The simulation is drawn on the switchboards layer, so make sure it's visible.
+    if (next) setLayersOn((s) => ({ ...s, switchboards: true }));
+  }
+
+  // Each switchboard bucketed to its nearest suburb + that suburb's flood risk.
+  // Bucketing uses the full suburb list (so far-away boards don't get wrongly
+  // assigned to the nearest focus suburb); the focus filter comes after.
+  // Shared by the grid-status board and the insights drawer.
+  const switchboardsWithRisk = useMemo(() => {
+    if (!switchboards.data || !suburbs.suburbs.length) return [];
+    return switchboards.data.features
+      .map((f) => {
+        const [lon, lat] = f.geometry.coordinates;
+        const suburb = nearestSuburb(lon, lat, suburbs.suburbs);
+        return {
+          suburb,
+          lon,
+          lat,
+          risk: suburb ? flood.bySuburb[normalizeSuburb(suburb)] : null,
+          critical: f.properties.class === 'THREE-PHASE' && f.properties.owner === 'GCCC',
+          size: f.properties.size,
+        };
+      })
+      .filter((x) => x.suburb && inFocus(x.suburb));
+  }, [switchboards.data, suburbs.suburbs, flood.bySuburb]);
+
+  // Community buildings bucketed to a suburb the same way, so the bbox query's
+  // spillover (Southport, Helensvale edges) drops out of the focus region.
+  const buildingsInFocus = useMemo(() => {
+    if (!communityBuildings.buildings.length || !suburbs.suburbs.length) return [];
+    return communityBuildings.buildings
+      .map((b) => ({ ...b, suburb: nearestSuburb(b.lon, b.lat, suburbs.suburbs) }))
+      .filter((b) => b.suburb && inFocus(b.suburb));
+  }, [communityBuildings.buildings, suburbs.suburbs]);
 
   return (
     <div id="app">
@@ -36,7 +80,7 @@ export default function App() {
           flood={flood}
           suburbs={suburbs.suburbs}
           switchboards={switchboards}
-          switchboardHighRiskOnly={switchboardHighRiskOnly}
+          outageSimOn={outageSimOn}
           layersOn={layersOn}
         />
       </div>
@@ -44,14 +88,36 @@ export default function App() {
       <header>
         <div className="titles">
           <h1>Data<span>Gap</span> Gold Coast</h1>
-          <div className="subtitle">Zoning, development approvals and flood risk - Gold Coast</div>
+          <div className="subtitle">Flood risk × electrical grid · Runaway Bay demo region</div>
         </div>
-        <button id="sidebar-toggle" title="Show/hide panel" onClick={() => setSidebarCollapsed((c) => !c)}>
-          {sidebarCollapsed ? '<<' : '>>'}
+
+        <div className="layer-chips">
+          <button className={`chip ${layersOn.flood ? 'on' : ''}`} onClick={() => toggleLayer('flood')}>
+            <span className="chip-dot" style={{ background: '#4A90D9' }} />
+            Flood risk
+          </button>
+          <button className={`chip ${layersOn.switchboards ? 'on' : ''}`} onClick={() => toggleLayer('switchboards')}>
+            <span className="chip-dot" style={{ background: '#E0C341' }} />
+            Switchboards
+          </button>
+          <button className={`chip ${insightsOpen ? 'on' : ''}`} onClick={() => setInsightsOpen((o) => !o)}>
+            Insights
+          </button>
+        </div>
+
+        <button className={`sim-cta ${outageSimOn ? 'active' : ''}`} onClick={toggleOutageSim}>
+          {outageSimOn ? '■ Stop simulation' : '⚡ Simulate flood outage'}
         </button>
       </header>
 
-      {!sidebarCollapsed && (
+      <GridStatus
+        switchboards={switchboardsWithRisk}
+        buildings={buildingsInFocus}
+        simOn={outageSimOn}
+        loading={switchboards.loading || flood.loading}
+      />
+
+      {insightsOpen && (
         <Sidebar
           zoning={zoning}
           historical={historical.rows}
@@ -59,20 +125,20 @@ export default function App() {
           suburbs={suburbs.suburbs}
           suburbZoning={suburbZoning}
           switchboards={switchboards}
-          switchboardHighRiskOnly={switchboardHighRiskOnly}
-          setSwitchboardHighRiskOnly={setSwitchboardHighRiskOnly}
-          layersOn={layersOn}
-          toggleLayer={toggleLayer}
+          switchboardsWithRisk={switchboardsWithRisk}
+          communityBuildings={communityBuildings}
+          rain={rain}
           meta={{ devApps: historical.meta }}
           historicalDebug={historical.debug}
         />
       )}
 
-      <footer>
+      <footer style={{ right: insightsOpen ? 448 : 14 }}>
         {SHOW_ZONING && 'Zoning: City of Gold Coast Open Data Portal, City Plan v9 - fetched live. '}
         Development approvals: Supabase (historical records 2012-2016). Flood risk: Flood Risk
         Overlay, 2024 modeling - fetched live. Electrical switchboards: City of Gold Coast Open
-        Data Portal - fetched live. Suburb locations are approximate (centroid).
+        Data Portal - fetched live. Rain forecast: Open-Meteo (external source) - fetched live.
+        Suburb locations are approximate (centroid).
       </footer>
     </div>
   );

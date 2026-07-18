@@ -31,3 +31,35 @@ export const RISK_COLOR = {
 };
 
 export const HIGH_RISK = ['High', 'Very High'];
+
+// Switchboard size class (SIZE_M field) → marker radius in px and indicative
+// coverage radius in metres. The metre values are nominal, for visualisation
+// only: no electrical service-area data exists in any public dataset (the
+// technical fields are null on all 4,119 records — verified via the live API).
+export const SWITCHBOARD_MARKER_PX = { LARGE: 5, MEDIUM: 3.5, SMALL: 2.5, TBA: 2.5 };
+export const SWITCHBOARD_RANGE_M = { LARGE: 600, MEDIUM: 300, SMALL: 150, TBA: 150 };
+
+// Colour for switchboards taken offline by the outage simulation.
+export const OFFLINE_COLOR = '#E5484D';
+
+// Focus mode: every map layer and analysis panel is limited to these suburbs
+// (the Runaway Bay demo region). Reversible like the SHOW_* flags — set the
+// list to [] to go back to city-wide. Data fetching is unchanged; this is a
+// display filter only.
+export const FOCUS_SUBURBS = [
+  'Runaway Bay',
+  'Hollywell',
+  'Paradise Point',
+  'Coombabah',
+  'Biggera Waters',
+  'Labrador',
+  'Arundel',
+  'South Stradbroke',
+];
+export const FOCUS_CENTER = [-27.91, 153.39];
+export const FOCUS_ZOOM = 13;
+// Envelope around the focus suburbs (lonMin,latMin,lonMax,latMax) — used to
+// keep the community-buildings query small; results are still bucketed to a
+// suburb and filtered by inFocus afterwards.
+export const FOCUS_BBOX = '153.33,-27.98,153.44,-27.85';
+export const inFocus = (name) => FOCUS_SUBURBS.length === 0 || FOCUS_SUBURBS.includes(name);

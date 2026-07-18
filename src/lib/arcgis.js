@@ -16,6 +16,10 @@ const SWITCHBOARD_URL =
   'https://services.arcgis.com/3vStCH7NDoBOZ5zn/arcgis/rest/services/Switchboard/FeatureServer';
 const SWITCHBOARD_LAYER_ID = 0;
 
+const BUILDINGS_URL =
+  'https://services.arcgis.com/3vStCH7NDoBOZ5zn/arcgis/rest/services/Buildings_FL/FeatureServer';
+const BUILDINGS_LAYER_ID = 0;
+
 async function fetchAllFeatures(baseUrl, layerId, { outFields = '*', where = '1=1', geometry = true } = {}) {
   const all = [];
   let offset = 0;
@@ -126,9 +130,62 @@ export async function fetchFloodRiskBySuburb() {
   return { bySuburb: result, citywide, debug };
 }
 
+// Council-maintained community-critical buildings (community centres, halls,
+// libraries, child care, indoor sporting complexes) inside the focus-region
+// envelope. Footprints are polygons; a ring-average centroid is plenty for the
+// "does an outage circle contain it" test.
+export async function fetchCommunityBuildings(bbox) {
+  const paramsObj = {
+    where:
+      "BUILDING_USE LIKE '%COMMUNITY%' OR BUILDING_USE LIKE '%LIBRARY%' OR " +
+      "BUILDING_USE LIKE '%CHILD CARE%' OR BUILDING_USE LIKE '%SPORTING%'",
+    geometry: bbox,
+    geometryType: 'esriGeometryEnvelope',
+    inSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: 'GIS_DESCRIPTION,BUILDING_USE',
+    returnGeometry: 'true',
+    f: 'geojson',
+  };
+  const params = new URLSearchParams(paramsObj);
+  const url = `${BUILDINGS_URL}/${BUILDINGS_LAYER_ID}/query?${params}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if (json.error) throw new Error(JSON.stringify(json.error));
+  const buildings = (json.features || []).map((f) => {
+    const ring =
+      f.geometry.type === 'Polygon' ? f.geometry.coordinates[0] : f.geometry.coordinates[0][0];
+    let lon = 0;
+    let lat = 0;
+    ring.forEach(([x, y]) => {
+      lon += x;
+      lat += y;
+    });
+    return {
+      name: f.properties.GIS_DESCRIPTION,
+      use: f.properties.BUILDING_USE,
+      lon: lon / ring.length,
+      lat: lat / ring.length,
+    };
+  });
+  return { buildings, debug: { url, params: paramsObj, sample: json.features?.[0] || null } };
+}
+
+// Haversine distance in metres.
+export function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 export async function fetchSwitchboards() {
   const { features, debug } = await fetchAllFeatures(SWITCHBOARD_URL, SWITCHBOARD_LAYER_ID, {
-    outFields: 'CLASS,GIS_USER_STATUS,GIS_OWNER',
+    outFields: 'CLASS,GIS_USER_STATUS,GIS_OWNER,SIZE_M',
   });
   return {
     geojson: {
@@ -139,6 +196,7 @@ export async function fetchSwitchboards() {
           class: f.properties.CLASS,
           status: f.properties.GIS_USER_STATUS,
           owner: f.properties.GIS_OWNER,
+          size: f.properties.SIZE_M,
         },
       })),
     },
