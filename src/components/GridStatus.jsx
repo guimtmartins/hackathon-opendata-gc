@@ -130,7 +130,7 @@ export default function GridStatus({ switchboards, buildings, simOn, severity, h
           </button>
           <button className="gs-action-btn" onClick={() => setOpenModal('plan')}>
             <span className="gs-action-num">{hitFacilities.length}</span>
-            <span className="gs-action-label">facilities hit · Contingency</span>
+            <span className="gs-action-label">priority action plan</span>
           </button>
         </div>
       )}
