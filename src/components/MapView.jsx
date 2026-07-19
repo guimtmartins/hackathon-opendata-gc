@@ -5,7 +5,6 @@ import {
   ZONE_COLORS,
   ZONE_LABELS,
   RISK_COLOR,
-  HIGH_RISK,
   SWITCHBOARD_MARKER_PX,
   SWITCHBOARD_RANGE_M,
   OFFLINE_COLOR,
@@ -27,7 +26,7 @@ function AutoInvalidateSize() {
   return null;
 }
 
-export default function MapView({ zoning, historical, flood, suburbs, switchboards, outageSimOn, layersOn }) {
+export default function MapView({ zoning, historical, flood, suburbs, switchboards, outageSimOn, offlineIdx, layersOn }) {
   const maxCount = useMemo(
     () => Math.max(1, ...historical.map((p) => p.count || 0)),
     [historical]
@@ -37,11 +36,10 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
   // to its nearest suburb centroid to borrow that suburb's flood risk score.
   const switchboardData = useMemo(() => {
     if (!switchboards?.data || !suburbs.length) return null;
-    const withRisk = switchboards.data.features.map((f) => {
+    const withRisk = switchboards.data.features.map((f, idx) => {
       const [lon, lat] = f.geometry.coordinates;
       const suburb = nearestSuburb(lon, lat, suburbs);
       const risk = flood.bySuburb[suburb];
-      const critical = f.properties.class === 'THREE-PHASE' && f.properties.owner === 'GCCC';
       return {
         ...f,
         properties: {
@@ -49,15 +47,15 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
           suburb,
           riskScore: risk?.score ?? null,
           riskDominant: risk?.dominant ?? null,
-          // Offline in the simulated scenario: every critical (GCCC, three-phase)
-          // switchboard in a High/Very High flood-risk suburb fails at once.
-          offline: outageSimOn && critical && HIGH_RISK.includes(risk?.dominant),
+          // Offline in the simulated scenario: App ranks the region's boards by
+          // exposure and passes the failing set down, keyed by feature index.
+          offline: outageSimOn && offlineIdx.has(idx),
         },
       };
     });
     const features = withRisk.filter((f) => inFocus(f.properties.suburb));
     return { ...switchboards.data, features };
-  }, [switchboards?.data, suburbs, flood.bySuburb, outageSimOn]);
+  }, [switchboards?.data, suburbs, flood.bySuburb, outageSimOn, offlineIdx]);
 
   return (
     // preferCanvas: 4k+ circle markers as individual SVG nodes make the page crawl;
@@ -137,7 +135,7 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
 
       {layersOn.switchboards && switchboardData && (
         <GeoJSON
-          key={`switchboards-${outageSimOn}`}
+          key={`switchboards-${outageSimOn}-${offlineIdx.size}`}
           data={switchboardData}
           pointToLayer={(feature, latlng) => {
             const { riskDominant, size, offline } = feature.properties;

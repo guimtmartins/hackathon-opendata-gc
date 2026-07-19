@@ -11,7 +11,8 @@ import { useSuburbZoning } from './hooks/useSuburbZoning';
 import { useSwitchboards } from './hooks/useSwitchboards';
 import { useRainForecast } from './hooks/useRainForecast';
 import { useCommunityBuildings } from './hooks/useCommunityBuildings';
-import { SHOW_ZONING, inFocus } from './data/densityColors';
+import { SHOW_ZONING, inFocus, severityLevel, exposureRank } from './data/densityColors';
+import SeveritySlider from './components/SeveritySlider';
 import { normalizeSuburb, nearestSuburb } from './lib/arcgis';
 import './App.css';
 
@@ -27,6 +28,7 @@ export default function App() {
 
   const [layersOn, setLayersOn] = useState({ zoning: false, historical: false, flood: true, switchboards: true });
   const [outageSimOn, setOutageSimOn] = useState(false);
+  const [simSeverity, setSimSeverity] = useState('moderate');
   const [insightsOpen, setInsightsOpen] = useState(false);
 
   function toggleLayer(key) {
@@ -47,10 +49,11 @@ export default function App() {
   const switchboardsWithRisk = useMemo(() => {
     if (!switchboards.data || !suburbs.suburbs.length) return [];
     return switchboards.data.features
-      .map((f) => {
+      .map((f, idx) => {
         const [lon, lat] = f.geometry.coordinates;
         const suburb = nearestSuburb(lon, lat, suburbs.suburbs);
         return {
+          idx,
           suburb,
           lon,
           lat,
@@ -61,6 +64,20 @@ export default function App() {
       })
       .filter((x) => x.suburb && inFocus(x.suburb));
   }, [switchboards.data, suburbs.suburbs, flood.bySuburb]);
+
+  // The N most exposed boards fail at the selected severity (see SEVERITY_LEVELS).
+  // Keyed by original feature index so the map and the status board agree.
+  const offlineIdx = useMemo(() => {
+    if (!outageSimOn) return new Set();
+    const count = severityLevel(simSeverity).count;
+    const ranked = [...switchboardsWithRisk].sort((a, b) => exposureRank(b) - exposureRank(a));
+    return new Set(ranked.slice(0, count).map((b) => b.idx));
+  }, [switchboardsWithRisk, outageSimOn, simSeverity]);
+
+  const boardsForStatus = useMemo(
+    () => switchboardsWithRisk.map((b) => ({ ...b, offline: offlineIdx.has(b.idx) })),
+    [switchboardsWithRisk, offlineIdx]
+  );
 
   // Community buildings bucketed to a suburb the same way, so the bbox query's
   // spillover (Southport, Helensvale edges) drops out of the focus region.
@@ -81,6 +98,7 @@ export default function App() {
           suburbs={suburbs.suburbs}
           switchboards={switchboards}
           outageSimOn={outageSimOn}
+          offlineIdx={offlineIdx}
           layersOn={layersOn}
         />
       </div>
@@ -111,11 +129,19 @@ export default function App() {
       </header>
 
       <GridStatus
-        switchboards={switchboardsWithRisk}
+        switchboards={boardsForStatus}
         buildings={buildingsInFocus}
         simOn={outageSimOn}
         loading={switchboards.loading || flood.loading}
       />
+
+      {outageSimOn && (
+        <SeveritySlider
+          severity={simSeverity}
+          setSeverity={setSimSeverity}
+          offlineCount={offlineIdx.size}
+        />
+      )}
 
       {insightsOpen && (
         <Sidebar

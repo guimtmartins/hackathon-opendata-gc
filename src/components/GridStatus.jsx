@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HIGH_RISK, SWITCHBOARD_RANGE_M } from '../data/densityColors';
+import { SWITCHBOARD_RANGE_M } from '../data/densityColors';
 import {
   POPULATION_2021,
   AVG_HOUSEHOLD_SIZE,
@@ -13,6 +13,7 @@ function rangeOf(size) {
 }
 
 function fmtCost(aud) {
+  if (aud >= 1e6) return `A$${(aud / 1e6).toFixed(1)}M`;
   return aud >= 1000 ? `A$${(aud / 1000).toFixed(1)}k` : `A$${aud}`;
 }
 
@@ -32,36 +33,35 @@ function Modal({ title, onClose, children }) {
 }
 
 // Live grid-status board for the focus region. One row per suburb; when the
-// outage simulation is running, critical boards (GCCC, three-phase) in
-// High/Very High flood-risk suburbs flip to offline — correlated flood damage
-// on shared low-lying ground, not an electrical cascade (feeder/substation
-// topology isn't published, so failures aren't modelled as contagious).
+// outage simulation is running, the boards App ranked as most exposed arrive
+// with `offline: true` — correlated flood damage on shared low-lying ground,
+// not an electrical cascade (feeder/substation topology isn't published, so
+// failures aren't modelled as contagious).
 export default function GridStatus({ switchboards, buildings, simOn, loading }) {
   const [openModal, setOpenModal] = useState(null); // 'impact' | 'plan' | null
 
   const bySuburb = {};
   switchboards.forEach((s) => {
-    if (!bySuburb[s.suburb]) bySuburb[s.suburb] = { total: 0, critical: 0, risk: s.risk, areaM2: 0 };
+    if (!bySuburb[s.suburb]) {
+      bySuburb[s.suburb] = { total: 0, critical: 0, offline: 0, risk: s.risk, areaM2: 0 };
+    }
     const entry = bySuburb[s.suburb];
     entry.total += 1;
-    if (s.critical) {
-      entry.critical += 1;
+    if (s.critical) entry.critical += 1;
+    if (s.offline) {
+      entry.offline += 1;
       const r = rangeOf(s.size);
       entry.areaM2 += Math.PI * r * r;
     }
   });
 
   const rows = Object.entries(bySuburb)
-    .map(([name, e]) => {
-      const highRisk = !!(e.risk && HIGH_RISK.includes(e.risk.dominant));
-      const offline = simOn && highRisk ? e.critical : 0;
-      return { name, ...e, highRisk, offline, online: e.total - offline };
-    })
+    .map(([name, e]) => ({ name, ...e, online: e.total - e.offline }))
     .sort((a, b) => b.offline - a.offline || b.total - a.total);
 
   const online = rows.reduce((n, r) => n + r.online, 0);
   const offline = rows.reduce((n, r) => n + r.offline, 0);
-  const areaKm2 = rows.reduce((n, r) => n + (r.offline ? r.areaM2 : 0), 0) / 1e6;
+  const areaKm2 = rows.reduce((n, r) => n + r.areaM2, 0) / 1e6;
 
   // Impact estimate: population spread evenly across the suburb's switchboards
   // (the only defensible allocation without service-area data), cost from the
@@ -73,16 +73,15 @@ export default function GridStatus({ switchboards, buildings, simOn, loading }) 
       const people = Math.round(pop * (r.offline / r.total));
       const costHour = Math.round((people / AVG_HOUSEHOLD_SIZE) * OUTAGE_COST_PER_HOUSEHOLD_HOUR_AUD);
       return { name: r.name, people, costHour, offline: r.offline };
-    });
+    })
+    .sort((a, b) => b.people - a.people);
   const totalPeople = impact.reduce((n, i) => n + i.people, 0);
   const totalCostHour = impact.reduce((n, i) => n + i.costHour, 0);
   const maxPeople = Math.max(1, ...impact.map((i) => i.people));
 
   // A community building is inside the outage if any offline board's indicative
   // service circle contains it.
-  const offlineBoards = simOn
-    ? switchboards.filter((s) => s.critical && s.risk && HIGH_RISK.includes(s.risk.dominant))
-    : [];
+  const offlineBoards = simOn ? switchboards.filter((s) => s.offline) : [];
   const facilities = buildings
     .map((b) => ({
       ...b,
@@ -155,10 +154,12 @@ export default function GridStatus({ switchboards, buildings, simOn, loading }) 
       </div>
 
       <div className="gs-footnote">
-        Simulation: critical switchboards (GCCC, three-phase) in High/Very High flood-risk suburbs
-        fail together from flood damage — a shared cause, not an electrical cascade. Map circles are
-        each board's own indicative service area by size class (S 150 m · M 300 m · L 600 m); no
-        real service-area data is published (see Insights → Data sources).
+        Simulation: the severity slider takes the N most exposed boards offline (Minor 5 ·
+        Moderate 10 · Severe 20). Exposure is a deterministic ranking over real fields — critical
+        boards (GCCC, three-phase) first, then higher suburb 2024 flood-risk score, then larger
+        size class. A shared cause, not an electrical cascade. Map circles are each board's own
+        indicative service area (S 150 m · M 300 m · L 600 m); no real service-area data is
+        published (see Insights → Data sources).
       </div>
 
       {openModal === 'impact' && (
@@ -197,8 +198,8 @@ export default function GridStatus({ switchboards, buildings, simOn, loading }) 
         <Modal title="Contingency plan" onClose={() => setOpenModal(null)}>
           <ol className="gs-plan">
             <li>
-              Dispatch mobile generation to the {offline} offline critical boards — priority order{' '}
-              {impact.map((i) => i.name).join(' → ')} (most boards down first).
+              Dispatch mobile generation to the {offline} offline boards — priority order{' '}
+              {impact.map((i) => i.name).join(' → ')} (most people affected first).
             </li>
             <li>Restore LARGE boards first (600 m indicative footprint), then MEDIUM and SMALL.</li>
             {hitFacilities.length > 0 && (

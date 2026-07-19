@@ -42,6 +42,27 @@ export const SWITCHBOARD_RANGE_M = { LARGE: 600, MEDIUM: 300, SMALL: 150, TBA: 1
 // Colour for switchboards taken offline by the outage simulation.
 export const OFFLINE_COLOR = '#E5484D';
 
+// Outage-simulation severity: each level takes the N most EXPOSED boards
+// offline. Exposure is a deterministic ranking over real fields — critical
+// boards (GCCC, three-phase) first, then higher suburb 2024 flood-risk score,
+// then larger SIZE_M class. No randomness: the same boards fail every run.
+export const SEVERITY_LEVELS = [
+  { id: 'minor', label: 'Minor', count: 5, color: '#E0C341' },
+  { id: 'moderate', label: 'Moderate', count: 10, color: '#F2A623' },
+  { id: 'severe', label: 'Severe', count: 20, color: '#E5484D' },
+];
+export const severityLevel = (id) => SEVERITY_LEVELS.find((l) => l.id === id) || SEVERITY_LEVELS[1];
+
+const SIZE_RANK = { LARGE: 3, MEDIUM: 2, SMALL: 1, TBA: 0 };
+// Higher = more exposed. b: { critical, risk, size }.
+export function exposureRank(b) {
+  return (
+    (b.critical ? 1e6 : 0) +
+    (b.risk?.score ?? 0) * 100 +
+    (SIZE_RANK[(b.size || 'TBA').toUpperCase()] || 0)
+  );
+}
+
 // Focus mode: every map layer and analysis panel is limited to these suburbs
 // (the Runaway Bay demo region). Reversible like the SHOW_* flags — set the
 // list to [] to go back to city-wide. Data fetching is unchanged; this is a
