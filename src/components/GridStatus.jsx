@@ -14,7 +14,7 @@ function rangeOf(size) {
 
 function fmtCost(aud) {
   if (aud >= 1e6) return `A$${(aud / 1e6).toFixed(1)}M`;
-  return aud >= 1000 ? `A$${(aud / 1000).toFixed(1)}k` : `A$${aud}`;
+  return aud >= 1000 ? `A$${Math.round(aud).toLocaleString('en-AU')}` : `A$${aud}`;
 }
 
 function Modal({ title, onClose, children }) {

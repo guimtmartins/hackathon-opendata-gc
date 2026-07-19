@@ -92,7 +92,7 @@ export default function Sidebar({
   ).length;
   const riskySwitchboardPct = totalSwitchboards ? Math.round((riskySwitchboardCount / totalSwitchboards) * 100) : null;
 
-  const yearsSinceApprovals = new Date().getFullYear() - 2016;
+  
 
   const [inspecting, setInspecting] = useState(null);
   const debugByLayer = {
@@ -188,11 +188,6 @@ export default function Sidebar({
       )}
 
       <Accordion title="Data sources">
-        <div className="stat-card">
-          <div className="num" style={{ color: 'var(--critical)' }}>{yearsSinceApprovals} years</div>
-          <div className="label">The time since the development approvals dataset was last genuinely updated.</div>
-          <div className="stat-source">Calculated from the interval covered by the dataset (2012–2016)</div>
-        </div>
         {SHOW_ZONING && (
           <div className="vintage-row">
             <div className="vintage-dot amber" />
@@ -209,20 +204,7 @@ export default function Sidebar({
             </button>
           </div>
         )}
-        <div className="vintage-row">
-          <div className={`vintage-dot ${meta.devApps?.freshness || 'red'}`} />
-          <div className="info">
-            <b>Development approvals</b>
-            <span>{meta.devApps?.reference_period || 'Records 2012–2016'} · Supabase</span>
-          </div>
-          <button
-            className="api-inspect-btn"
-            disabled={!debugByLayer.historical}
-            onClick={() => setInspecting('historical')}
-          >
-            View call
-          </button>
-        </div>
+        {/* Development approvals removed from Data sources */}
         <div className="vintage-row">
           <div className="vintage-dot green" />
           <div className="info">
