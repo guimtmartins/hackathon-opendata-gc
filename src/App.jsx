@@ -11,7 +11,7 @@ import { useSuburbZoning } from './hooks/useSuburbZoning';
 import { useSwitchboards } from './hooks/useSwitchboards';
 import { useRainForecast } from './hooks/useRainForecast';
 import { useCommunityBuildings } from './hooks/useCommunityBuildings';
-import { SHOW_ZONING, inFocus, severityLevel, exposureRank } from './data/densityColors';
+import { SHOW_ZONING, inFocus, exposureRank, offlineCountAtHour } from './data/densityColors';
 import SeveritySlider from './components/SeveritySlider';
 import { normalizeSuburb, nearestSuburb } from './lib/arcgis';
 import './App.css';
@@ -28,7 +28,8 @@ export default function App() {
 
   const [layersOn, setLayersOn] = useState({ zoning: false, historical: false, flood: true, switchboards: true });
   const [outageSimOn, setOutageSimOn] = useState(false);
-  const [simSeverity, setSimSeverity] = useState('moderate');
+  const [simSeverity, setSimSeverity] = useState('minor');
+  const [simHours, setSimHours] = useState(1);
   const [insightsOpen, setInsightsOpen] = useState(false);
 
   function toggleLayer(key) {
@@ -38,8 +39,12 @@ export default function App() {
   function toggleOutageSim() {
     const next = !outageSimOn;
     setOutageSimOn(next);
-    // The simulation is drawn on the switchboards layer, so make sure it's visible.
-    if (next) setLayersOn((s) => ({ ...s, switchboards: true }));
+    if (next) {
+      // The simulation is drawn on the switchboards layer, so make sure it's visible.
+      setLayersOn((s) => ({ ...s, switchboards: true }));
+      // Every run starts at hour 1 — the flood has just begun.
+      setSimHours(1);
+    }
   }
 
   // Each switchboard bucketed to its nearest suburb + that suburb's flood risk.
@@ -65,14 +70,15 @@ export default function App() {
       .filter((x) => x.suburb && inFocus(x.suburb));
   }, [switchboards.data, suburbs.suburbs, flood.bySuburb]);
 
-  // The N most exposed boards fail at the selected severity (see SEVERITY_LEVELS).
-  // Keyed by original feature index so the map and the status board agree.
+  // The N most exposed boards fail at the selected severity, ramping up with
+  // elapsed hours (see offlineCountAtHour). Keyed by original feature index so
+  // the map and the status board agree.
   const offlineIdx = useMemo(() => {
     if (!outageSimOn) return new Set();
-    const count = severityLevel(simSeverity).count;
+    const count = offlineCountAtHour(simSeverity, simHours);
     const ranked = [...switchboardsWithRisk].sort((a, b) => exposureRank(b) - exposureRank(a));
     return new Set(ranked.slice(0, count).map((b) => b.idx));
-  }, [switchboardsWithRisk, outageSimOn, simSeverity]);
+  }, [switchboardsWithRisk, outageSimOn, simSeverity, simHours]);
 
   const boardsForStatus = useMemo(
     () => switchboardsWithRisk.map((b) => ({ ...b, offline: offlineIdx.has(b.idx) })),
@@ -132,6 +138,8 @@ export default function App() {
         switchboards={boardsForStatus}
         buildings={buildingsInFocus}
         simOn={outageSimOn}
+        severity={simSeverity}
+        hours={simHours}
         loading={switchboards.loading || flood.loading}
       />
 
@@ -139,6 +147,8 @@ export default function App() {
         <SeveritySlider
           severity={simSeverity}
           setSeverity={setSimSeverity}
+          hours={simHours}
+          setHours={setSimHours}
           offlineCount={offlineIdx.size}
         />
       )}

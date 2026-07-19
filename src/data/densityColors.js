@@ -53,6 +53,17 @@ export const SEVERITY_LEVELS = [
 ];
 export const severityLevel = (id) => SEVERITY_LEVELS.find((l) => l.id === id) || SEVERITY_LEVELS[1];
 
+// Hours since the flood event began, and how many of a severity's target
+// boards have failed by then. A stated linear-ramp assumption — not a
+// measured flood-propagation curve — reaching the full target at RAMP_HOURS
+// and holding flat after (the event has fully developed).
+export const RAMP_HOURS = 6;
+export function offlineCountAtHour(id, hours) {
+  const target = severityLevel(id).count;
+  const frac = Math.min(1, Math.max(0, hours) / RAMP_HOURS);
+  return Math.round(target * frac);
+}
+
 const SIZE_RANK = { LARGE: 3, MEDIUM: 2, SMALL: 1, TBA: 0 };
 // Higher = more exposed. b: { critical, risk, size }.
 export function exposureRank(b) {

@@ -186,6 +186,7 @@ header .subtitle { font-size: 11px; color: var(--text-faint); margin-top: 1px; w
 }
 .ss-labels button:hover { color: var(--text); }
 .ss-labels button.on { color: var(--sev-color); }
+.ss-hours-head { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 
 .gs-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .gs-action-btn {
@@ -219,6 +220,15 @@ header .subtitle { font-size: 11px; color: var(--text-faint); margin-top: 1px; w
 .impact-val span { color: var(--text-faint); font-weight: 400; }
 
 .gs-assumptions { font-size: 9.5px; line-height: 1.5; color: var(--text-faint); margin-top: 8px; font-style: italic; }
+
+.time-chart { display: flex; align-items: flex-end; gap: 5px; height: 72px; margin: 4px 0 6px; }
+.time-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 3px; }
+.time-bar-value { font-size: 9px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.time-bar { width: 100%; min-height: 3px; border-radius: 3px 3px 0 0; background: var(--border); transition: height 0.3s ease, background 0.3s ease; }
+.time-bar.past { background: color-mix(in srgb, var(--sev-color) 40%, var(--border)); }
+.time-bar.current { background: var(--sev-color); }
+.time-label { font-size: 9px; color: var(--text-faint); }
+.time-label.current { color: var(--text); font-weight: 700; }
 
 .gs-plan { margin: 0 0 4px 16px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .gs-plan li { font-size: 11px; line-height: 1.45; color: var(--text-dim); }

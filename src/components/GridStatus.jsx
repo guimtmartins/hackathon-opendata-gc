@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SWITCHBOARD_RANGE_M } from '../data/densityColors';
+import { SWITCHBOARD_RANGE_M, severityLevel, offlineCountAtHour, RAMP_HOURS } from '../data/densityColors';
 import {
   POPULATION_2021,
   AVG_HOUSEHOLD_SIZE,
@@ -37,8 +37,10 @@ function Modal({ title, onClose, children }) {
 // with `offline: true` — correlated flood damage on shared low-lying ground,
 // not an electrical cascade (feeder/substation topology isn't published, so
 // failures aren't modelled as contagious).
-export default function GridStatus({ switchboards, buildings, simOn, loading }) {
+export default function GridStatus({ switchboards, buildings, simOn, severity, hours, loading }) {
   const [openModal, setOpenModal] = useState(null); // 'impact' | 'plan' | null
+  const sevColor = severityLevel(severity).color;
+  const sevTarget = severityLevel(severity).count;
 
   const bySuburb = {};
   switchboards.forEach((s) => {
@@ -154,17 +156,18 @@ export default function GridStatus({ switchboards, buildings, simOn, loading }) 
       </div>
 
       <div className="gs-footnote">
-        Simulation: the severity slider takes the N most exposed boards offline (Minor 5 ·
-        Moderate 10 · Severe 20). Exposure is a deterministic ranking over real fields — critical
-        boards (GCCC, three-phase) first, then higher suburb 2024 flood-risk score, then larger
-        size class. A shared cause, not an electrical cascade. Map circles are each board's own
-        indicative service area (S 150 m · M 300 m · L 600 m); no real service-area data is
-        published (see Insights → Data sources).
+        Simulation: the severity slider sets a target board count (Minor 5 · Moderate 10 · Severe
+        20); the hours slider ramps toward it, reaching full severity by hour {RAMP_HOURS}.
+        Exposure is a deterministic ranking over real fields — critical boards (GCCC, three-phase)
+        first, then higher suburb 2024 flood-risk score, then larger size class. A shared cause,
+        not an electrical cascade. Map circles are each board's own indicative service area (S 150 m
+        · M 300 m · L 600 m); no real service-area data is published (see Insights → Data sources).
       </div>
 
       {openModal === 'impact' && (
         <Modal title="Impact estimate" onClose={() => setOpenModal(null)}>
           <div className="gs-impact-head">
+            Hour {hours}:{' '}
             <span className="gs-impact-people">{totalPeople.toLocaleString('en-AU')} people</span>{' '}
             without power · ~{fmtCost(totalCostHour)}/hour economic impact
           </div>
@@ -191,11 +194,38 @@ export default function GridStatus({ switchboards, buildings, simOn, loading }) 
             across each suburb's switchboards; cost ≈ A${OUTAGE_COST_PER_HOUSEHOLD_HOUR_AUD} per
             household-hour (AER Value of Customer Reliability 2019).
           </div>
+
+          <div className="gs-section-title" style={{ marginBottom: 6 }}>Damage over time</div>
+          <div className="time-chart" style={{ '--sev-color': sevColor }}>
+            {Array.from({ length: 8 }, (_, i) => i + 1).map((h) => {
+              const n = offlineCountAtHour(severity, h);
+              const pct = sevTarget ? Math.round((n / sevTarget) * 100) : 0;
+              return (
+                <div className="time-bar-col" key={h}>
+                  <div className="time-bar-value">{n}</div>
+                  <div
+                    className={`time-bar ${h === hours ? 'current' : h < hours ? 'past' : ''}`}
+                    style={{ height: `${Math.max(pct, 4)}%` }}
+                    title={`Hour ${h}: ${n} of ${sevTarget} boards offline`}
+                  />
+                  <div className={`time-label ${h === hours ? 'current' : ''}`}>{h}h</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="gs-assumptions">
+            Modelled ramp, not a measured flood-propagation curve: boards fail progressively,
+            reaching this severity's full board count ({sevTarget}) by hour {RAMP_HOURS}. Drag the
+            hours slider under the map to move through the event.
+          </div>
         </Modal>
       )}
 
       {openModal === 'plan' && (
         <Modal title="Contingency plan" onClose={() => setOpenModal(null)}>
+          <div className="gs-impact-head" style={{ marginBottom: 10 }}>
+            Snapshot at hour {hours} of the simulated event.
+          </div>
           <ol className="gs-plan">
             <li>
               Dispatch mobile generation to the {offline} offline boards — priority order{' '}
