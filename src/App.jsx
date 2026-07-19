@@ -196,14 +196,6 @@ export default function App() {
           historicalDebug={historical.debug}
         />
       )}
-
-      <footer style={{ right: insightsOpen ? 448 : 14 }}>
-        {SHOW_ZONING && 'Zoning: City of Gold Coast Open Data Portal, City Plan v9 - fetched live. '}
-        Development approvals: Supabase (historical records 2012-2016). Flood risk: Flood Risk
-        Overlay, 2024 modeling - fetched live. Electrical switchboards: City of Gold Coast Open
-        Data Portal - fetched live. Rain forecast: Open-Meteo (external source) - fetched live.
-        Suburb locations are approximate (centroid).
-      </footer>
     </div>
   );
 }

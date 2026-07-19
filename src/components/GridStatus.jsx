@@ -155,15 +155,6 @@ export default function GridStatus({ switchboards, buildings, simOn, severity, h
         ))}
       </div>
 
-      <div className="gs-footnote">
-        Simulation: the severity slider sets a target board count (Minor 5 · Moderate 10 · Severe
-        20); the hours slider ramps toward it, reaching full severity by hour {RAMP_HOURS}.
-        Exposure is a deterministic ranking over real fields — critical boards (GCCC, three-phase)
-        first, then higher suburb 2024 flood-risk score, then larger size class. A shared cause,
-        not an electrical cascade. Map circles are each board's own indicative service area (S 150 m
-        · M 300 m · L 600 m); no real service-area data is published (see Insights → Data sources).
-      </div>
-
       {openModal === 'impact' && (
         <Modal title="Impact estimate" onClose={() => setOpenModal(null)}>
           <div className="gs-impact-head">
