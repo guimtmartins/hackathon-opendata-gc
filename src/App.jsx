@@ -13,6 +13,7 @@ import { useRainForecast } from './hooks/useRainForecast';
 import { useCommunityBuildings } from './hooks/useCommunityBuildings';
 import { SHOW_ZONING, inFocus, exposureRank, offlineCountAtHour } from './data/densityColors';
 import SeveritySlider from './components/SeveritySlider';
+import RepairChecklist from './components/RepairChecklist';
 import { normalizeSuburb, nearestSuburb } from './lib/arcgis';
 import './App.css';
 
@@ -31,6 +32,10 @@ export default function App() {
   const [simSeverity, setSimSeverity] = useState('minor');
   const [simHours, setSimHours] = useState(1);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  // Boards a technician has been marked as having fixed on-site — an override
+  // on top of the severity/hours ramp, not part of it, so a repaired board
+  // stays online even if the slider moves further.
+  const [repairedIdx, setRepairedIdx] = useState(new Set());
 
   function toggleLayer(key) {
     setLayersOn((s) => ({ ...s, [key]: !s[key] }));
@@ -44,7 +49,12 @@ export default function App() {
       setLayersOn((s) => ({ ...s, switchboards: true }));
       // Every run starts at hour 1 — the flood has just begun.
       setSimHours(1);
+      setRepairedIdx(new Set());
     }
+  }
+
+  function repairBoard(idx) {
+    setRepairedIdx((prev) => new Set(prev).add(idx));
   }
 
   // Each switchboard bucketed to its nearest suburb + that suburb's flood risk.
@@ -59,6 +69,7 @@ export default function App() {
         const suburb = nearestSuburb(lon, lat, suburbs.suburbs);
         return {
           idx,
+          assetId: f.properties.assetId,
           suburb,
           lon,
           lat,
@@ -80,9 +91,22 @@ export default function App() {
     return new Set(ranked.slice(0, count).map((b) => b.idx));
   }, [switchboardsWithRisk, outageSimOn, simSeverity, simHours]);
 
+  // What's actually down right now: the ramp's failures minus anything a
+  // technician has already fixed on-site.
+  const effectiveOfflineIdx = useMemo(() => {
+    const s = new Set(offlineIdx);
+    repairedIdx.forEach((i) => s.delete(i));
+    return s;
+  }, [offlineIdx, repairedIdx]);
+
   const boardsForStatus = useMemo(
-    () => switchboardsWithRisk.map((b) => ({ ...b, offline: offlineIdx.has(b.idx) })),
-    [switchboardsWithRisk, offlineIdx]
+    () => switchboardsWithRisk.map((b) => ({ ...b, offline: effectiveOfflineIdx.has(b.idx) })),
+    [switchboardsWithRisk, effectiveOfflineIdx]
+  );
+
+  const boardsNeedingRepair = useMemo(
+    () => switchboardsWithRisk.filter((b) => effectiveOfflineIdx.has(b.idx)),
+    [switchboardsWithRisk, effectiveOfflineIdx]
   );
 
   // Community buildings bucketed to a suburb the same way, so the bbox query's
@@ -104,14 +128,14 @@ export default function App() {
           suburbs={suburbs.suburbs}
           switchboards={switchboards}
           outageSimOn={outageSimOn}
-          offlineIdx={offlineIdx}
+          offlineIdx={effectiveOfflineIdx}
           layersOn={layersOn}
         />
       </div>
 
       <header>
         <div className="titles">
-          <h1>Data<span>Gap</span> Gold Coast</h1>
+          <h1>Switch<span>Guard</span></h1>
           <div className="subtitle">Flood risk × electrical grid · Runaway Bay demo region</div>
         </div>
 
@@ -149,8 +173,12 @@ export default function App() {
           setSeverity={setSimSeverity}
           hours={simHours}
           setHours={setSimHours}
-          offlineCount={offlineIdx.size}
+          offlineCount={effectiveOfflineIdx.size}
         />
+      )}
+
+      {outageSimOn && !insightsOpen && (
+        <RepairChecklist boards={boardsNeedingRepair} onRepair={repairBoard} />
       )}
 
       {insightsOpen && (

@@ -185,7 +185,7 @@ export function distanceMeters(lat1, lon1, lat2, lon2) {
 
 export async function fetchSwitchboards() {
   const { features, debug } = await fetchAllFeatures(SWITCHBOARD_URL, SWITCHBOARD_LAYER_ID, {
-    outFields: 'CLASS,GIS_USER_STATUS,GIS_OWNER,SIZE_M',
+    outFields: 'OBJECTID,CLASS,GIS_USER_STATUS,GIS_OWNER,SIZE_M',
   });
   return {
     geojson: {
@@ -193,6 +193,7 @@ export async function fetchSwitchboards() {
       features: features.map((f) => ({
         ...f,
         properties: {
+          assetId: f.properties.OBJECTID,
           class: f.properties.CLASS,
           status: f.properties.GIS_USER_STATUS,
           owner: f.properties.GIS_OWNER,

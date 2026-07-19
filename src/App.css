@@ -247,6 +247,68 @@ header .subtitle { font-size: 11px; color: var(--text-faint); margin-top: 1px; w
 .gs-fac-meta { font-size: 9.5px; color: var(--text-faint); }
 .gs-fac-more { font-size: 10px; color: var(--text-faint); padding: 2px 0 0 2px; }
 
+/* Repair checklist (right, mirrors Grid Status) */
+#repair-checklist {
+  position: absolute;
+  top: 76px;
+  right: 14px;
+  bottom: 60px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(20, 23, 29, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: var(--shadow-md);
+}
+.rc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.rc-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); }
+.rc-pill {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 4px 9px; border-radius: 20px; white-space: nowrap;
+  background: rgba(229, 72, 77, 0.16); color: #e5484d;
+}
+.rc-empty { font-size: 11.5px; color: var(--text-faint); }
+
+.rc-cards { display: flex; flex-direction: column; gap: 10px; }
+.rc-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.rc-card-head { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 10px; }
+.rc-dot { width: 9px; height: 9px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 8px rgba(229, 72, 77, 0.8); margin-top: 4px; flex-shrink: 0; animation: pill-blink 1.2s ease-in-out infinite; }
+.rc-card-title { flex: 1; min-width: 0; }
+.rc-name { font-size: 12.5px; font-weight: 700; }
+.rc-meta { font-size: 10.5px; color: var(--text-faint); margin-top: 1px; text-transform: capitalize; }
+.rc-progress { font-size: 10.5px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.rc-tasks { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.rc-task { display: flex; align-items: center; gap: 8px; padding: 6px 2px; cursor: pointer; }
+.rc-task input { position: absolute; opacity: 0; width: 0; height: 0; }
+.rc-check {
+  width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--text-faint);
+  flex-shrink: 0; position: relative; transition: background 0.15s, border-color 0.15s;
+}
+.rc-task.done .rc-check { background: var(--good); border-color: var(--good); }
+.rc-task.done .rc-check::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+  border: solid #0b0d11; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.rc-task-label { font-size: 11.5px; color: var(--text-dim); transition: color 0.15s; }
+.rc-task.done .rc-task-label { color: var(--text); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+
+.rc-done-btn {
+  width: 100%; padding: 9px; font-size: 11px; font-weight: 700; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text-faint);
+  cursor: not-allowed; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.rc-done-btn:not(:disabled) {
+  background: var(--good-wash); color: var(--good); border-color: rgba(51, 177, 122, 0.4); cursor: pointer;
+}
+.rc-done-btn:not(:disabled):hover { background: var(--good); color: #0b0d11; }
+
 /* Insights drawer (right) */
 #sidebar {
   position: absolute;
