@@ -45,16 +45,12 @@ export default function GridStatus({ switchboards, buildings, simOn, severity, h
   const bySuburb = {};
   switchboards.forEach((s) => {
     if (!bySuburb[s.suburb]) {
-      bySuburb[s.suburb] = { total: 0, critical: 0, offline: 0, risk: s.risk, areaM2: 0 };
+      bySuburb[s.suburb] = { total: 0, critical: 0, offline: 0, risk: s.risk };
     }
     const entry = bySuburb[s.suburb];
     entry.total += 1;
     if (s.critical) entry.critical += 1;
-    if (s.offline) {
-      entry.offline += 1;
-      const r = rangeOf(s.size);
-      entry.areaM2 += Math.PI * r * r;
-    }
+    if (s.offline) entry.offline += 1;
   });
 
   const rows = Object.entries(bySuburb)
@@ -63,7 +59,6 @@ export default function GridStatus({ switchboards, buildings, simOn, severity, h
 
   const online = rows.reduce((n, r) => n + r.online, 0);
   const offline = rows.reduce((n, r) => n + r.offline, 0);
-  const areaKm2 = rows.reduce((n, r) => n + r.areaM2, 0) / 1e6;
 
   // Impact estimate: population spread evenly across the suburb's switchboards
   // (the only defensible allocation without service-area data), cost from the
@@ -114,13 +109,6 @@ export default function GridStatus({ switchboards, buildings, simOn, severity, h
           <div className="gs-tile-label">Offline</div>
         </div>
       </div>
-
-      {simActive && (
-        <div className="gs-impact">
-          ~{Math.round(areaKm2 * 10) / 10} km² combined indicative service area without power
-          (each board's own footprint — areas may overlap)
-        </div>
-      )}
 
       {simActive && (
         <div className="gs-actions">

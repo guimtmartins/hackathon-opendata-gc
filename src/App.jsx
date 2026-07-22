@@ -3,31 +3,25 @@ import 'leaflet/dist/leaflet.css';
 import MapView from './components/MapView';
 import Sidebar from './components/Sidebar';
 import GridStatus from './components/GridStatus';
-import { useZoning } from './hooks/useZoning';
-import { useHistorical } from './hooks/useHistorical';
 import { useFloodRisk } from './hooks/useFloodRisk';
 import { useSuburbs } from './hooks/useSuburbs';
-import { useSuburbZoning } from './hooks/useSuburbZoning';
 import { useSwitchboards } from './hooks/useSwitchboards';
 import { useRainForecast } from './hooks/useRainForecast';
 import { useCommunityBuildings } from './hooks/useCommunityBuildings';
-import { SHOW_ZONING, inFocus, exposureRank, offlineCountAtHour } from './data/densityColors';
+import { inFocus, exposureRank, offlineCountAtHour } from './data/densityColors';
 import SeveritySlider from './components/SeveritySlider';
 import RepairChecklist from './components/RepairChecklist';
 import { normalizeSuburb, nearestSuburb } from './lib/arcgis';
 import './App.css';
 
 export default function App() {
-  const zoning = useZoning(SHOW_ZONING);
-  const historical = useHistorical();
   const flood = useFloodRisk();
   const suburbs = useSuburbs();
-  const suburbZoning = useSuburbZoning(SHOW_ZONING);
   const switchboards = useSwitchboards();
   const rain = useRainForecast(suburbs.suburbs);
   const communityBuildings = useCommunityBuildings();
 
-  const [layersOn, setLayersOn] = useState({ zoning: false, historical: false, flood: true, switchboards: true });
+  const [layersOn, setLayersOn] = useState({ flood: true, switchboards: true });
   const [outageSimOn, setOutageSimOn] = useState(false);
   const [simSeverity, setSimSeverity] = useState('minor');
   const [simHours, setSimHours] = useState(1);
@@ -122,8 +116,6 @@ export default function App() {
     <div id="app">
       <div id="map">
         <MapView
-          zoning={zoning}
-          historical={historical.rows}
           flood={flood}
           suburbs={suburbs.suburbs}
           switchboards={switchboards}
@@ -183,17 +175,12 @@ export default function App() {
 
       {insightsOpen && (
         <Sidebar
-          zoning={zoning}
-          historical={historical.rows}
           flood={flood}
           suburbs={suburbs.suburbs}
-          suburbZoning={suburbZoning}
           switchboards={switchboards}
           switchboardsWithRisk={switchboardsWithRisk}
           communityBuildings={communityBuildings}
           rain={rain}
-          meta={{ devApps: historical.meta }}
-          historicalDebug={historical.debug}
         />
       )}
     </div>

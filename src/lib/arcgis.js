@@ -1,13 +1,3 @@
-const ZONING_URL =
-  'https://services.arcgis.com/3vStCH7NDoBOZ5zn/arcgis/rest/services/City_Plan_Version_9/FeatureServer';
-const ZONING_LAYER_ID = 3;
-const RESIDENTIAL_ZONES = [
-  'Low density residential',
-  'Medium density residential',
-  'High density residential',
-  'Rural residential',
-];
-
 const FLOOD_URL =
   'https://services-ap1.arcgis.com/lnVW0dLI3fvST2hd/arcgis/rest/services/Flood_Risk_Overlay_2024/FeatureServer';
 const FLOOD_LAYER_ID = 35;
@@ -45,27 +35,6 @@ async function fetchAllFeatures(baseUrl, layerId, { outFields = '*', where = '1=
     if (!json.properties?.exceededTransferLimit || features.length === 0) break;
   }
   return { features: all, debug };
-}
-
-export async function fetchZoning() {
-  const where = RESIDENTIAL_ZONES.map((z) => `LVL1_ZONE = '${z}'`).join(' OR ');
-  const { features, debug } = await fetchAllFeatures(ZONING_URL, ZONING_LAYER_ID, {
-    outFields: 'LVL1_ZONE,ZONE_PRECINCT',
-    where,
-  });
-  return {
-    geojson: {
-      type: 'FeatureCollection',
-      features: features.map((f) => ({
-        ...f,
-        properties: {
-          tier: f.properties.LVL1_ZONE,
-          precinct: f.properties.ZONE_PRECINCT,
-        },
-      })),
-    },
-    debug,
-  };
 }
 
 const RISK_WEIGHT = { 'Very High': 4, High: 3, Medium: 2, Low: 1, 'Maximum Regional Flood Extent': 0.5 };

@@ -2,8 +2,6 @@ import { MapContainer, TileLayer, GeoJSON, CircleMarker, Popup, useMap } from 'r
 import L from 'leaflet';
 import { useEffect, useMemo } from 'react';
 import {
-  ZONE_COLORS,
-  ZONE_LABELS,
   RISK_COLOR,
   SWITCHBOARD_MARKER_PX,
   SWITCHBOARD_RANGE_M,
@@ -26,12 +24,7 @@ function AutoInvalidateSize() {
   return null;
 }
 
-export default function MapView({ zoning, historical, flood, suburbs, switchboards, outageSimOn, offlineIdx, layersOn }) {
-  const maxCount = useMemo(
-    () => Math.max(1, ...historical.map((p) => p.count || 0)),
-    [historical]
-  );
-
+export default function MapView({ flood, suburbs, switchboards, outageSimOn, offlineIdx, layersOn }) {
   // The Switchboard dataset has no suburb attribute, so each point is bucketed
   // to its nearest suburb centroid to borrow that suburb's flood risk score.
   const switchboardData = useMemo(() => {
@@ -74,42 +67,6 @@ export default function MapView({ zoning, historical, flood, suburbs, switchboar
         subdomains="abcd"
         maxZoom={19}
       />
-
-      {layersOn.zoning && zoning?.data && (
-        <GeoJSON
-          key="zoning"
-          data={zoning.data}
-          style={(feature) => ({
-            fillColor: ZONE_COLORS[feature.properties.tier],
-            fillOpacity: 0.45,
-            color: ZONE_COLORS[feature.properties.tier],
-            weight: 0.6,
-            opacity: 0.8,
-          })}
-          onEachFeature={(feature, layer) => {
-            const label = ZONE_LABELS[feature.properties.tier] || feature.properties.tier;
-            layer.bindPopup(
-              `<div class="popup-zone">${label}</div>` +
-                `<div class="popup-precinct">${feature.properties.precinct || 'No specific precinct'}</div>`
-            );
-          }}
-        />
-      )}
-
-      {layersOn.historical &&
-        historical.map((p) => (
-          <CircleMarker
-            key={p.suburb}
-            center={[p.lat, p.lon]}
-            radius={6 + (p.count / maxCount) * 24}
-            pathOptions={{ fillColor: '#F2A623', fillOpacity: 0.35, color: '#F2A623', weight: 1, opacity: 0.8 }}
-          >
-            <Popup>
-              <div className="popup-suburb">{p.suburb}</div>
-              <div className="popup-count">{p.count} development applications</div>
-            </Popup>
-          </CircleMarker>
-        ))}
 
       {layersOn.flood &&
         suburbs
